@@ -4,10 +4,10 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::convert::Infallible;
 use std::fs::OpenOptions;
-use std::io;
 use std::io::{stdin, Write};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, Arc};
+use std::{fs, io};
 use tokio::sync::Mutex;
 use warp::Filter;
 
@@ -245,7 +245,8 @@ async fn server(settings: Settings, ip: [u8; 4], port: u16, senders: Senders) {
                                 .await,
                         )
                     },
-                ));
+                ))
+            .or(warp::get().map(|| fs::read("timer.txt").map_err(|_| "oof")));
     let _ = senders.cli.send(Message::Empty);
     println!("{:?}", warp::serve(routes).run((ip, port)).await);
 }
