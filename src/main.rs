@@ -1,5 +1,6 @@
 use hyper::body::Bytes;
 use hyper::HeaderMap;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::io;
@@ -33,16 +34,28 @@ fn handle_twitch_event(
     } else {
         return Err("".to_string());
     };
-    let event = body.get("event").unwrap().as_object().unwrap();
     println!("\n\n{:?}", body.keys().collect::<Vec<_>>());
-    println!("\n\n{:?}", event.keys().collect::<Vec<_>>());
+    let subscription = body.get("subscription").unwrap().as_object().unwrap();
+    println!("\n\n{:?}", subscription.keys().collect::<Vec<_>>());
+    for (k, v) in subscription {
+        println!("{}, {:?}", k, v);
+    }
     Ok("".to_string())
 }
 
 fn handle_kofi_event() {}
 
-async fn handle_url_encoded(headers: HeaderMap, body: HashMap<String, String>, senders: Senders) -> Result<String, String>{
-    println!("{:?}", body);
+async fn handle_url_encoded(
+    headers: HeaderMap,
+    body: HashMap<String, String>,
+    senders: Senders,
+) -> Result<String, String> {
+    let data = body.get("data").ok_or("nani=".to_string())?;
+    let data: Value = serde_json::from_str(&data).or(Err("NANI???".to_string()))?;
+    let data = data.as_object().ok_or("NANI????".to_string())?;
+    for (k, v) in data {
+        println!("{}, {:?}", k, v);
+    }
     Ok("".to_string())
 }
 
@@ -62,7 +75,14 @@ async fn server(ip: [u8; 4], port: u16, senders: Senders) {
         .and(with_senders(senders.clone()))
         .and_then(move |headers, body, senders| async move {
             Ok::<_, Infallible>(handle_json(headers, body, senders).await)
-        });
+        })
+        .or(warp::any()
+            .and(warp::header::headers_cloned())
+            .and(warp::body::form())
+            .and(with_senders(senders.clone()))
+            .and_then(move |headers, body, senders| async move {
+                Ok::<_, Infallible>(handle_url_encoded(headers, body, senders).await)
+            }));
     let _ = senders.cli.send("server".to_string());
     println!("{:?}", warp::serve(routes).run((ip, port)).await);
 }
