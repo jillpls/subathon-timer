@@ -52,10 +52,10 @@ async fn handle_twitch_event(
 
     match event_type.as_str() {
         "channel.cheer" => {
-            let amount = event.extract_object_f64("bits")?;
+            let amount : f64 = event.extract_object_f64("bits")?;
             let _ = senders
                 .timer
-                .send(Message::AddTime(amount / 100. * settings.bit_per_100_value));
+                .send(Message::AddBits(amount.floor() as u64));
 
             {
                 let mut si = saved_ids.lock().await;
@@ -68,10 +68,8 @@ async fn handle_twitch_event(
             let _ = log_event("twitch-cheer", &id, amount);
         }
         "channel.subscribe" => {
-            let amount = event.extract_object_str("tier")?.parse().map_err(|_| Error::ftp("str", "f64"))?;
-            let _ = senders.timer.send(Message::AddTime(
-                amount / 1000. * settings.subscription_value,
-            ));
+            let amount: f64 = event.extract_object_str("tier")?.parse().map_err(|_| Error::ftp("str", "f64"))?;
+            let _ = senders.timer.send(Message::AddSub(amount.floor() as u64));
             {
                 let mut si = saved_ids.lock().await;
                 if si.contains(&id) {
@@ -108,7 +106,7 @@ async fn handle_kofi_event(
         let _r = log_event("kofi", &transaction_id, amount);
         let _ = senders
             .timer
-            .send(Message::AddTime(settings.kofi_ratio * amount));
+            .send(Message::AddDonation(amount));
     }
     Ok("".to_string())
 }

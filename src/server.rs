@@ -28,11 +28,10 @@ pub(crate) struct Settings {
 #[derive(Clone, Debug)]
 pub(crate) enum Message {
     Empty,
-    #[allow(unused)]
     String(String),
-    AddTime(f64),
-    #[allow(unused)]
-    SubtractTime(f64),
+    AddDonation(f64),
+    AddBits(u64),
+    AddSub(u64)
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -58,7 +57,7 @@ async fn main() {
     };
     let senders_timer = senders_server.clone();
     let server = tokio::spawn(async move {
-        api_server::server(settings, [127, 0, 0, 1], 8080, senders_server).await;
+        api_server::server(settings, [0, 0, 0, 0], 8080, senders_server).await;
     });
     let timer = tokio::spawn(async move {
         timer::timer(settings, senders_timer, timer_rx).await;
