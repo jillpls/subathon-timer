@@ -64,42 +64,6 @@ async fn main() {
         timer::timer(settings, senders_timer, timer_rx).await;
     });
 
-    let rx = cli_rx;
-    let _ = rx.recv();
-    let _ = rx.recv();
-
-    loop {
-        print!("> ");
-        let _ = io::stdout().flush();
-        let mut input = String::new();
-        let _ = stdin().read_line(&mut input);
-        println!("{}", input);
-        let input = input.trim().to_ascii_lowercase();
-        let split = input.split(' ').collect::<Vec<_>>();
-        if split.is_empty() {
-            continue;
-        }
-        match split[0] {
-            "stop" => {
-                break;
-            }
-            "pause" => {
-                println!("Pausing timer ...");
-                let _ = timer_tx.send(Message::Empty);
-            }
-            "addtime" | "add" => {
-                if split.len() < 2 {
-                    continue;
-                } else {
-                    println!("Adding {} minutes", split[1]);
-                }
-            }
-            _ => {
-                println!("unrecognized command \"{}\"", input);
-            }
-        }
-    }
-
     server.await.expect("");
     timer.await.expect("");
 }
