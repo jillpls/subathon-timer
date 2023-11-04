@@ -12,6 +12,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use warp::http::HeaderMap;
 use warp::Filter;
+use subathon_timer::Error;
 
 fn log_event(name: &str, id: &str, value: f64) -> Result<(), std::io::Error> {
     let mut file = OpenOptions::new()
@@ -39,8 +40,8 @@ async fn handle_twitch_event(
     senders: Senders,
     saved_ids: Arc<Mutex<HashSet<String>>>,
     settings: Settings,
-) -> Result<String, String> {
-    if ! body.is_object() { return Err("Not an object".to_string()); }
+) -> Result<String, Error> {
+    if ! body.is_object() { return Err(Error::cne("obj")) }
     if let Ok(c) = body.extract_object_key("challenge") {
         return c.extract_str()
     }
@@ -67,7 +68,7 @@ async fn handle_twitch_event(
             let _ = log_event("twitch-cheer", &id, amount);
         }
         "channel.subscribe" => {
-            let amount = event.extract_object_str("tier")?.parse().map_err(|_| "Parse Error")?;
+            let amount = event.extract_object_str("tier")?.parse().map_err(|_| Error::ftp("str", "f64"))?;
             let _ = senders.timer.send(Message::AddTime(
                 amount / 1000. * settings.subscription_value,
             ));
@@ -92,10 +93,10 @@ async fn handle_kofi_event(
     senders: Senders,
     saved_ids: Arc<Mutex<HashSet<String>>>,
     settings: Settings,
-) -> Result<String, String> {
-    let data = body.get("data").ok_or("nani=".to_string())?;
-    let data: Value = serde_json::from_str(data).or(Err("NANI???".to_string()))?;
-    let amount = data.extract_object_str("amount")?.parse().map_err(|_| "Parse error")?;
+) -> Result<String, Error> {
+    let data = body.get("data").ok_or(Error::knf("data"))?;
+    let data: Value = serde_json::from_str(data).map_err(|_| Error::ftp("str", "value"))?;
+    let amount = data.extract_object_str("amount")?.parse().map_err(|_| Error::ftp("str", "f64"))?;
     let transaction_id = data.extract_object_str("kofi_transaction_id")?;
     {
         let mut si = saved_ids.lock().await;
@@ -118,7 +119,7 @@ async fn handle_url_encoded(
     senders: Senders,
     saved_ids: Arc<Mutex<HashSet<String>>>,
     settings: Settings,
-) -> Result<String, String> {
+) -> Result<String, Error> {
     handle_kofi_event(headers, body, senders, saved_ids, settings).await
 }
 
@@ -128,7 +129,7 @@ async fn handle_json(
     senders: Senders,
     saved_ids: Arc<Mutex<HashSet<String>>>,
     settings: Settings,
-) -> Result<String, String> {
+) -> Result<String, Error> {
     handle_twitch_event(headers, body, senders, saved_ids, settings).await
 }
 
