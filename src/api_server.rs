@@ -1,6 +1,7 @@
 use crate::Message;
 use crate::Senders;
 use crate::Settings;
+use crate::serialize::FastExtract;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::convert::Infallible;
@@ -9,8 +10,8 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use warp::Filter;
 use warp::http::HeaderMap;
+use warp::Filter;
 
 fn log_event(name: &str, id: &str, value: f64) -> Result<(), std::io::Error> {
     let mut file = OpenOptions::new()
@@ -39,78 +40,46 @@ async fn handle_twitch_event(
     saved_ids: Arc<Mutex<HashSet<String>>>,
     settings: Settings,
 ) -> Result<String, String> {
-    let body = if let Some(b) = body.as_object() {
-        b
-    } else {
-        return Err("".to_string());
-    };
-    if let Some(c) = body.get("challenge") {
-        return Ok(c.as_str().ok_or("No challenge string".to_string())?.to_string());
+    if ! body.is_object() { return Err("Not an object".to_string()); }
+    if let Ok(c) = body.extract_object_key("challenge") {
+        return c.extract_str()
     }
-    let subscription = body
-        .get("subscription")
-        .ok_or("no subscription found".to_string())?
-        .as_object()
-        .ok_or("subscription not an Object")?;
-    let event_type = subscription
-        .get("type")
-        .ok_or("no type found".to_string())?
-        .as_str()
-        .ok_or("not a string".to_string())?;
-    let id = subscription
-        .get("id")
-        .ok_or("no id found")?
-        .as_str()
-        .ok_or("not a string")?;
-    let event = body
-        .get("event")
-        .ok_or("no subscription found".to_string())?
-        .as_object()
-        .ok_or("subscription not an Object")?;
-    match event_type {
+    let subscription = body.extract_object_key("subscription")?;
+    let event_type = subscription.extract_object_str("type")?;
+    let id = subscription.extract_object_str("id")?;
+    let event = body.extract_object_key("event")?;
+
+    match event_type.as_str() {
         "channel.cheer" => {
-            let amount = event
-                .get("bits")
-                .ok_or("bits not found".to_string())?
-                .as_number()
-                .ok_or("not a number".to_string())?
-                .as_f64()
-                .ok_or("not a f64")?;
+            let amount = event.extract_object_f64("bits")?;
             let _ = senders
                 .timer
                 .send(Message::AddTime(amount / 100. * settings.bit_per_100_value));
 
             {
                 let mut si = saved_ids.lock().await;
-                if si.contains(id) {
+                if si.contains(&id) {
                     println!("Duplicate transaction_id");
                     return Ok("".to_string());
                 }
                 si.insert(id.to_string());
             }
-            let _ = log_event("twitch-cheer", id, amount);
+            let _ = log_event("twitch-cheer", &id, amount);
         }
         "channel.subscribe" => {
-            println!("{:?}", event.get("tier").unwrap());
-            let amount = event
-                .get("tier")
-                .ok_or("bits not found".to_string())?
-                .as_str()
-                .ok_or("not a string".to_string())?
-                .parse()
-                .map_err(|_| "Parse error")?;
+            let amount = event.extract_object_str("tier")?.parse().map_err(|_| "Parse Error")?;
             let _ = senders.timer.send(Message::AddTime(
                 amount / 1000. * settings.subscription_value,
             ));
             {
                 let mut si = saved_ids.lock().await;
-                if si.contains(id) {
+                if si.contains(&id) {
                     println!("Duplicate transaction_id");
                     return Ok("".to_string());
                 }
                 si.insert(id.to_string());
             }
-            let _ = log_event("twitch-sub", id, amount);
+            let _ = log_event("twitch-sub", &id, amount);
         }
         _ => {}
     }
@@ -126,27 +95,16 @@ async fn handle_kofi_event(
 ) -> Result<String, String> {
     let data = body.get("data").ok_or("nani=".to_string())?;
     let data: Value = serde_json::from_str(data).or(Err("NANI???".to_string()))?;
-    let data = data.as_object().ok_or("NANI????".to_string())?;
-    let amount: f64 = data
-        .get("amount")
-        .ok_or("No amount".to_string())?
-        .as_str()
-        .unwrap()
-        .parse()
-        .unwrap();
-    let transaction_id = data
-        .get("kofi_transaction_id")
-        .ok_or("No transaction id".to_string())?
-        .as_str()
-        .unwrap();
+    let amount = data.extract_object_str("amount")?.parse().map_err(|_| "Parse error")?;
+    let transaction_id = data.extract_object_str("kofi_transaction_id")?;
     {
         let mut si = saved_ids.lock().await;
-        if si.contains(transaction_id) {
+        if si.contains(&transaction_id) {
             println!("Duplicate transaction_id");
             return Ok("".to_string());
         }
         si.insert(transaction_id.to_string());
-        let _r = log_event("kofi", transaction_id, amount);
+        let _r = log_event("kofi", &transaction_id, amount);
         let _ = senders
             .timer
             .send(Message::AddTime(settings.kofi_ratio * amount));

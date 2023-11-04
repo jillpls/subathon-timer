@@ -1,6 +1,6 @@
 use std::time::Duration;
-use warp::hyper::{Uri, Client};
 use warp::hyper::body::to_bytes;
+use warp::hyper::{Client, Uri};
 
 #[tokio::main]
 async fn main() {
@@ -16,16 +16,14 @@ async fn main() {
         r
     }));
     loop {
-        if rx.try_recv().is_ok() {
-            if response.is_some() {
-                let r = response.take().unwrap();
-                let response = r.await.unwrap();
-                if !response.status().is_success() {
-                    eprintln!("Request failed with status code: {}", response.status());
-                }
-
-                println!("{:?}", to_bytes(response.into_body()).await.unwrap());
+        if rx.try_recv().is_ok() && response.is_some() {
+            let r = response.take().unwrap();
+            let response = r.await.unwrap();
+            if !response.status().is_success() {
+                eprintln!("Request failed with status code: {}", response.status());
             }
+
+            println!("{:?}", to_bytes(response.into_body()).await.unwrap());
         }
     }
 }

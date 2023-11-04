@@ -5,10 +5,10 @@ use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{mpsc, Arc};
 use warp::Filter;
 
-
 mod api_server;
-mod timer;
 mod client;
+mod serialize;
+mod timer;
 
 #[derive(Clone)]
 pub(crate) struct Senders {
