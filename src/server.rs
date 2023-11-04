@@ -1,14 +1,13 @@
 use serde::{Deserialize, Serialize};
-use std::io;
-use std::io::{stdin, Write};
-use std::sync::mpsc::{Receiver, Sender};
+use std::io::{Write};
+use std::sync::mpsc::{Sender};
 use std::sync::{mpsc, Arc};
 use warp::Filter;
 
 mod api_server;
 mod client;
 mod serialize;
-mod timer;
+pub(crate) mod timer;
 
 #[derive(Clone)]
 pub(crate) struct Senders {
@@ -31,7 +30,7 @@ pub(crate) enum Message {
     String(String),
     AddDonation(f64),
     AddBits(u64),
-    AddSub(u64)
+    AddSub(u64),
 }
 
 #[derive(Serialize, Deserialize, Debug)]

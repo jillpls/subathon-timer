@@ -1,7 +1,7 @@
+use crate::serialize::FastExtract;
 use crate::Message;
 use crate::Senders;
 use crate::Settings;
-use crate::serialize::FastExtract;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::convert::Infallible;
@@ -9,10 +9,10 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::Arc;
+use subathon_timer::Error;
 use tokio::sync::Mutex;
 use warp::http::HeaderMap;
 use warp::Filter;
-use subathon_timer::Error;
 
 fn log_event(name: &str, id: &str, value: f64) -> Result<(), std::io::Error> {
     let mut file = OpenOptions::new()
@@ -41,9 +41,11 @@ async fn handle_twitch_event(
     saved_ids: Arc<Mutex<HashSet<String>>>,
     settings: Settings,
 ) -> Result<String, Error> {
-    if ! body.is_object() { return Err(Error::cne("obj")) }
+    if !body.is_object() {
+        return Err(Error::cne("obj"));
+    }
     if let Ok(c) = body.extract_object_key("challenge") {
-        return c.extract_str()
+        return c.extract_str();
     }
     let subscription = body.extract_object_key("subscription")?;
     let event_type = subscription.extract_object_str("type")?;
@@ -52,10 +54,8 @@ async fn handle_twitch_event(
 
     match event_type.as_str() {
         "channel.cheer" => {
-            let amount : f64 = event.extract_object_f64("bits")?;
-            let _ = senders
-                .timer
-                .send(Message::AddBits(amount.floor() as u64));
+            let amount: f64 = event.extract_object_f64("bits")?;
+            let _ = senders.timer.send(Message::AddBits(amount.floor() as u64));
 
             {
                 let mut si = saved_ids.lock().await;
@@ -68,7 +68,10 @@ async fn handle_twitch_event(
             let _ = log_event("twitch-cheer", &id, amount);
         }
         "channel.subscribe" => {
-            let amount: f64 = event.extract_object_str("tier")?.parse().map_err(|_| Error::ftp("str", "f64"))?;
+            let amount: f64 = event
+                .extract_object_str("tier")?
+                .parse()
+                .map_err(|_| Error::ftp("str", "f64"))?;
             let _ = senders.timer.send(Message::AddSub(amount.floor() as u64));
             {
                 let mut si = saved_ids.lock().await;
@@ -94,7 +97,10 @@ async fn handle_kofi_event(
 ) -> Result<String, Error> {
     let data = body.get("data").ok_or(Error::knf("data"))?;
     let data: Value = serde_json::from_str(data).map_err(|_| Error::ftp("str", "value"))?;
-    let amount = data.extract_object_str("amount")?.parse().map_err(|_| Error::ftp("str", "f64"))?;
+    let amount = data
+        .extract_object_str("amount")?
+        .parse()
+        .map_err(|_| Error::ftp("str", "f64"))?;
     let transaction_id = data.extract_object_str("kofi_transaction_id")?;
     {
         let mut si = saved_ids.lock().await;
@@ -104,9 +110,7 @@ async fn handle_kofi_event(
         }
         si.insert(transaction_id.to_string());
         let _r = log_event("kofi", &transaction_id, amount);
-        let _ = senders
-            .timer
-            .send(Message::AddDonation(amount));
+        let _ = senders.timer.send(Message::AddDonation(amount));
     }
     Ok("".to_string())
 }

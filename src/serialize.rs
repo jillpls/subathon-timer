@@ -32,8 +32,7 @@ impl FastExtract for Value {
     }
 
     fn extract_str(&self) -> Result<String, Error> {
-        Ok(self.as_str().ok_or(Error::cne("str"))?
-            .to_string())
+        Ok(self.as_str().ok_or(Error::cne("str"))?.to_string())
     }
 
     fn extract_obj(&self) -> Result<&Map<String, Value>, Error> {
@@ -41,7 +40,10 @@ impl FastExtract for Value {
     }
 
     fn extract_f64(&self) -> Result<f64, Error> {
-        Ok(self.as_number().ok_or(Error::cne("num"))?
-            .as_f64().ok_or(Error::ftp("num", "f64"))?)
+        Ok(self
+            .as_number()
+            .ok_or(Error::cne("num"))?
+            .as_f64()
+            .ok_or(Error::ftp("num", "f64"))?)
     }
 }
