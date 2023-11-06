@@ -1,9 +1,7 @@
 use std::{env, fs};
-use std::panic::panic_any;
+use std::io::Read;
 use chrono::{Duration, Local};
-use warp::hyper::body::{Bytes, to_bytes};
-use warp::hyper::{Client, Uri};
-use subathon_timer::Timer;
+use subathon_timer::{EventCounts, Settings};
 
 fn format(duration:  Duration) -> String {
     let days = duration.num_days();
@@ -25,6 +23,16 @@ fn format(duration:  Duration) -> String {
     result
 }
 
+fn calculate_max_time_bonus(event_counts: &EventCounts, settings: &Settings) -> Duration {
+    let mut result = Duration::zero();
+    result = result + Duration::seconds(((event_counts.subs as f64 * settings.subscription_value)*60.).floor() as i64);
+    result = result + Duration::seconds(((event_counts.donations * settings.kofi_ratio)*60.).floor() as i64);
+    result = result + Duration::seconds(((event_counts.bits as f64 * settings.bit_per_100_value)*60./100.).floor() as i64);
+    result = result + Duration::seconds(((event_counts.channel_point_rewards as f64 * settings.per_channel_point_reward)*60.).floor() as i64);
+    result
+}
+
+#[allow(dead_code)]
 #[tokio::main]
 async fn main() {
 
@@ -32,19 +40,20 @@ async fn main() {
 
     if args.len() < 2 { panic!("No ip supplied"); }
 
-    let url = args[1].parse::<Uri>().unwrap();
+    let url = args[1].clone();
 
-    let client = Client::new();
     let (tx, rx) = std::sync::mpsc::channel();
 
     let response = tokio::spawn(async move {
+        let url_txt = url.clone();
         loop {
-            let r = client.get(url.clone()).await;
-            if let Ok(r) = r {
-                if r.status().is_success() {
-                    let _ = tx.send(r.into_body());
+            if let Ok(r) = reqwest::get(&url_txt).await {
+                if let Ok(r) = r.text().await {
+                    let _ = tx.send(r);
                 }
             }
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         }
     });
 
@@ -52,18 +61,21 @@ async fn main() {
         let mut max_time = chrono::Duration::hours(6);
         max_time = max_time + Duration::seconds(1);
         let mut timestamp = chrono::Local::now();
+        let mut event_counts = EventCounts::default();
+        let mut bonus_time = Duration::zero();
+        let mut time_expired = Duration::zero();
 
         loop {
-            let r = rx.try_recv();
+            let r : Result<String, _> = rx.try_recv();
             if let Ok(r) = r {
-                let r = to_bytes(r).await.unwrap_or(Bytes::new());
-                if let Ok(v) = serde_json::de::from_str::<Timer>(&String::from_utf8_lossy(&r)) {
-                    println!("{:?}", &v);
+                if let Ok(v) = serde_json::de::from_str::<EventCounts>(&r) {
+                    event_counts = v;
+                    bonus_time = calculate_max_time_bonus(&event_counts, &Settings::default());
                 }
             }
-            let time_expired = Local::now() - timestamp;
-            let fmtd = format(max_time - time_expired);
-            let _ = std::fs::write("time_remaining.txt", fmtd);
+            time_expired = Local::now() - timestamp;
+            let fmtd = format(max_time + bonus_time - time_expired);
+            let _ = fs::write("time_remaining.txt", fmtd);
         }
     });
 

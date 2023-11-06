@@ -7,7 +7,7 @@ use warp::Filter;
 mod api_server;
 mod client;
 mod serialize;
-pub(crate) mod timer;
+mod event_counts;
 
 #[derive(Clone)]
 pub(crate) struct Senders {
@@ -17,12 +17,6 @@ pub(crate) struct Senders {
 
 unsafe impl Send for Senders {}
 
-#[derive(Copy, Clone)]
-pub(crate) struct Settings {
-    kofi_ratio: f64,
-    subscription_value: f64,
-    bit_per_100_value: f64,
-}
 
 #[derive(Clone, Debug)]
 pub(crate) enum Message {
@@ -31,6 +25,7 @@ pub(crate) enum Message {
     AddDonation(f64),
     AddBits(u64),
     AddSub(u64),
+    AddChannelPointReward,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -43,11 +38,6 @@ unsafe impl Send for Message {}
 
 #[tokio::main]
 async fn main() {
-    let settings = Settings {
-        kofi_ratio: 1.0,
-        subscription_value: 4.0,
-        bit_per_100_value: 1.0,
-    };
     let (cli_tx, cli_rx) = mpsc::channel();
     let (timer_tx, timer_rx) = mpsc::channel();
     let senders_server = Senders {
@@ -56,10 +46,10 @@ async fn main() {
     };
     let senders_timer = senders_server.clone();
     let server = tokio::spawn(async move {
-        api_server::server(settings, [0, 0, 0, 0], 8080, senders_server).await;
+        api_server::server([0, 0, 0, 0], 8080, senders_server).await;
     });
     let timer = tokio::spawn(async move {
-        timer::timer(settings, senders_timer, timer_rx).await;
+        event_counts::timer(senders_timer, timer_rx).await;
     });
 
     server.await.expect("");

@@ -1,15 +1,33 @@
 use serde::{Deserialize, Serialize};
-use warp::http::uri::Parts;
 use warp::http::{HeaderValue, StatusCode};
-use warp::hyper::Body;
 use warp::reply::Response;
 use warp::{http, Reply};
 
-#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
-pub struct Timer {
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, Default)]
+pub struct EventCounts {
     pub subs: u64,
     pub donations: f64,
     pub bits: u64,
+    pub channel_point_rewards: u64,
+}
+
+#[derive(Copy, Clone)]
+pub struct Settings {
+    pub kofi_ratio: f64,
+    pub subscription_value: f64,
+    pub bit_per_100_value: f64,
+    pub per_channel_point_reward: f64,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+       Self {
+           kofi_ratio : 1.0,
+           subscription_value : 4.0,
+           bit_per_100_value : 1.0,
+           per_channel_point_reward : 1.0
+       }
+    }
 }
 
 #[derive(Clone, Debug)]

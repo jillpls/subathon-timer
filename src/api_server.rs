@@ -1,7 +1,6 @@
 use crate::serialize::FastExtract;
 use crate::Message;
 use crate::Senders;
-use crate::Settings;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::convert::Infallible;
@@ -30,6 +29,16 @@ fn log_event(name: &str, id: &str, value: f64) -> Result<(), std::io::Error> {
     Ok(())
 }
 
+async fn check_transaction_id(saved_ids : Arc<Mutex<HashSet<String>>>, id : &str) -> bool {
+        let mut si = saved_ids.lock().await;
+        if si.contains(id) {
+            true
+        } else {
+            si.insert(id.to_string());
+            false
+        }
+}
+
 fn with_senders(sender: Senders) -> impl Filter<Extract = (Senders,), Error = Infallible> + Clone {
     warp::any().map(move || sender.clone())
 }
@@ -39,7 +48,6 @@ async fn handle_twitch_event(
     body: Value,
     senders: Senders,
     saved_ids: Arc<Mutex<HashSet<String>>>,
-    settings: Settings,
 ) -> Result<String, Error> {
     if !body.is_object() {
         return Err(Error::cne("obj"));
@@ -51,20 +59,14 @@ async fn handle_twitch_event(
     let event_type = subscription.extract_object_str("type")?;
     let id = subscription.extract_object_str("id")?;
     let event = body.extract_object_key("event")?;
+    if check_transaction_id(saved_ids, &id).await {
+        return Ok("".to_string());
+    }
 
     match event_type.as_str() {
         "channel.cheer" => {
             let amount: f64 = event.extract_object_f64("bits")?;
             let _ = senders.timer.send(Message::AddBits(amount.floor() as u64));
-
-            {
-                let mut si = saved_ids.lock().await;
-                if si.contains(&id) {
-                    println!("Duplicate transaction_id");
-                    return Ok("".to_string());
-                }
-                si.insert(id.to_string());
-            }
             let _ = log_event("twitch-cheer", &id, amount);
         }
         "channel.subscribe" => {
@@ -73,15 +75,17 @@ async fn handle_twitch_event(
                 .parse()
                 .map_err(|_| Error::ftp("str", "f64"))?;
             let _ = senders.timer.send(Message::AddSub(amount.floor() as u64));
-            {
-                let mut si = saved_ids.lock().await;
-                if si.contains(&id) {
-                    println!("Duplicate transaction_id");
-                    return Ok("".to_string());
-                }
-                si.insert(id.to_string());
-            }
             let _ = log_event("twitch-sub", &id, amount);
+        }
+        "channel.channel_points_custom_reward_redemption.add" => {
+            let reward = event.extract_object_key("reward")?;
+            let name = reward.extract_object_str("title")?;
+            if name == "Test Reward from CLI" {
+                let _ = senders.timer.send(Message::AddChannelPointReward);
+                let _ = log_event("channel-point-reward", &id, 1.);
+            } else {
+                println!("{}", name);
+            }
         }
         _ => {}
     }
@@ -93,7 +97,6 @@ async fn handle_kofi_event(
     body: HashMap<String, String>,
     senders: Senders,
     saved_ids: Arc<Mutex<HashSet<String>>>,
-    settings: Settings,
 ) -> Result<String, Error> {
     let data = body.get("data").ok_or(Error::knf("data"))?;
     let data: Value = serde_json::from_str(data).map_err(|_| Error::ftp("str", "value"))?;
@@ -120,22 +123,20 @@ async fn handle_url_encoded(
     body: HashMap<String, String>,
     senders: Senders,
     saved_ids: Arc<Mutex<HashSet<String>>>,
-    settings: Settings,
 ) -> Result<String, Error> {
-    handle_kofi_event(headers, body, senders, saved_ids, settings).await
+    handle_kofi_event(headers, body, senders, saved_ids).await
 }
 
 async fn handle_json(
     headers: HeaderMap,
-    body: serde_json::Value,
+    body: Value,
     senders: Senders,
     saved_ids: Arc<Mutex<HashSet<String>>>,
-    settings: Settings,
 ) -> Result<String, Error> {
-    handle_twitch_event(headers, body, senders, saved_ids, settings).await
+    handle_twitch_event(headers, body, senders, saved_ids).await
 }
 
-pub(crate) async fn server(settings: Settings, ip: [u8; 4], port: u16, senders: Senders) {
+pub(crate) async fn server(ip: [u8; 4], port: u16, senders: Senders) {
     println!("Starting api-server...");
     let saved_ids: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
     let saved_ids2 = saved_ids.clone();
@@ -148,15 +149,13 @@ pub(crate) async fn server(settings: Settings, ip: [u8; 4], port: u16, senders: 
                 .and(warp::body::json())
                 .and(with_senders(senders.clone()))
                 .and(warp::any().map(move || saved_ids.clone()))
-                .and(warp::any().map(move || settings))
                 .and_then(
                     move |headers,
                           body,
                           senders,
-                          saved_ids: Arc<Mutex<HashSet<String>>>,
-                          settings| async move {
+                          saved_ids: Arc<Mutex<HashSet<String>>>,| async move {
                         Ok::<_, Infallible>(
-                            handle_json(headers, body, senders, saved_ids.clone(), settings).await,
+                            handle_json(headers, body, senders, saved_ids.clone()).await,
                         )
                     },
                 ))
@@ -165,20 +164,21 @@ pub(crate) async fn server(settings: Settings, ip: [u8; 4], port: u16, senders: 
                 .and(warp::body::form())
                 .and(with_senders(senders.clone()))
                 .and(warp::any().map(move || saved_ids2.clone()))
-                .and(warp::any().map(move || settings))
                 .and_then(
                     move |headers,
                           body,
                           senders,
                           saved_ids: Arc<Mutex<HashSet<String>>>,
-                          settings| async move {
+                          | async move {
                         Ok::<_, Infallible>(
-                            handle_url_encoded(headers, body, senders, saved_ids.clone(), settings)
+                            handle_url_encoded(headers, body, senders, saved_ids.clone())
                                 .await,
                         )
                     },
                 ))
-            .or(warp::get().map(|| fs::read("timer.txt").map_err(|_| "oof")));
+            .or(warp::get().map(|| {
+                fs::read("timer.txt").map_err(|_| "oof")
+            }));
     let _ = senders.cli.send(Message::Empty);
     println!("{:?}", warp::serve(routes).run((ip, port)).await);
 }
