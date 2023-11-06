@@ -9,6 +9,8 @@ mod client;
 mod event_counts;
 mod serialize;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Clone)]
 pub(crate) struct Senders {
     pub cli: Arc<Sender<Message>>,
@@ -36,6 +38,7 @@ unsafe impl Send for Message {}
 
 #[tokio::main]
 async fn main() {
+    println!("Version: {}", VERSION);
     let (cli_tx, cli_rx) = mpsc::channel();
     let (timer_tx, timer_rx) = mpsc::channel();
     let senders_server = Senders {
