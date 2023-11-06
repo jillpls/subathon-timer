@@ -1,6 +1,6 @@
 use chrono::RoundingError::DurationExceedsLimit;
 use chrono::{Duration, Local};
-use std::fs::{OpenOptions, read_to_string};
+use std::fs::{read_to_string, OpenOptions};
 use std::io::{stdin, Read, Write};
 use std::path::Path;
 use std::{env, fs};
@@ -99,6 +99,12 @@ async fn main() {
                 if let Ok(v) = serde_json::de::from_str::<EventCounts>(&r) {
                     event_counts = v;
                     local_event_counts = read_local_event_counts();
+                    let combined = event_counts + local_event_counts;
+                    truncate_write_to_file("subs.txt", &combined.subs.to_string());
+                    truncate_write_to_file(
+                        "fake_subs.txt",
+                        &calculate_fake_subs(&combined, &Settings::default()).to_string(),
+                    );
                     bonus_time = calculate_max_time_bonus(
                         &(event_counts + local_event_counts),
                         &Settings::default(),
@@ -111,10 +117,7 @@ async fn main() {
                 time_remaining = Duration::zero();
             }
             let fmtd = format(time_remaining);
-            let r = OpenOptions::new().write(true).open("time_remaining.txt");
-            if let Ok(mut f) = r {
-                let _ = f.write_all(fmtd.as_bytes());
-            }
+            truncate_write_to_file("time_remaining.txt", &fmtd);
             if Local::now() - last_save > Duration::seconds(5) {
                 last_save = Local::now();
                 let _ = fs::write("time_expired.txt", time_expired.num_seconds().to_string());
@@ -132,6 +135,15 @@ async fn main() {
     let _ = timer.await;
 }
 
+fn calculate_fake_subs(event_counts: &EventCounts, settings: &Settings) -> u64 {
+    let mut result = event_counts.subs;
+    result += (event_counts.channel_point_rewards as f64 * settings.per_channel_point_reward / 4.)
+        .floor() as u64;
+    result += (event_counts.bits as f64 * settings.bit_per_100_value / 4.).floor() as u64;
+    result += (event_counts.donations * settings.kofi_ratio / 4.).floor() as u64;
+    result
+}
+
 fn read_local_event_counts() -> EventCounts {
     if let Ok(s) = fs::read_to_string("local_events.txt") {
         if let Ok(counts) = serde_json::from_str::<EventCounts>(&s) {
@@ -139,4 +151,11 @@ fn read_local_event_counts() -> EventCounts {
         }
     }
     return EventCounts::default();
+}
+
+fn truncate_write_to_file(path: &str, content: &str) {
+    let r = OpenOptions::new().write(true).open(path);
+    if let Ok(mut f) = r {
+        let _ = f.write_all(content.as_bytes());
+    }
 }
