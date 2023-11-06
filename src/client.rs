@@ -68,10 +68,10 @@ async fn main() {
         loop {
             if let Ok(r) = reqwest::get(&url_txt).await {
                 if let Ok(r) = r.text().await {
+                    println!("{}", r);
                     let _ = tx.send(r);
                 }
             }
-
             tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
         }
     });
@@ -96,6 +96,7 @@ async fn main() {
         loop {
             let r: Result<String, _> = rx.try_recv();
             if let Ok(r) = r {
+                println!("{}", r);
                 if let Ok(v) = serde_json::de::from_str::<EventCounts>(&r) {
                     event_counts = v;
                     local_event_counts = read_local_event_counts();
@@ -109,6 +110,7 @@ async fn main() {
                         &(event_counts + local_event_counts),
                         &Settings::default(),
                     );
+                    let _ = fs::write("events_saved.txt", &serde_json::to_string(&combined).unwrap());
                 }
             }
             time_expired = Local::now() - timestamp;

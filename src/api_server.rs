@@ -80,7 +80,7 @@ async fn handle_twitch_event(
         "channel.channel_points_custom_reward_redemption.add" => {
             let reward = event.extract_object_key("reward")?;
             let name = reward.extract_object_str("title")?;
-            if name == "Test Reward from CLI" {
+            if name == "Subathon Bonus Minute" {
                 let _ = senders.timer.send(Message::AddChannelPointReward);
                 let _ = log_event("channel-point-reward", &id, 1.);
             } else {

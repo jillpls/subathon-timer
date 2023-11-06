@@ -16,7 +16,10 @@ pub(crate) async fn timer(senders: Senders, receiver: Receiver<Message>) {
 
     loop {
         if let Ok(s) = serde_json::to_string(&event_counts) {
-            let _ = fs::write("timer.txt", s);
+            let r = fs::write("timer.txt", s);
+            if r.is_err() {
+                println!("{}", r.unwrap_err());
+            }
         }
         let msg = receiver.recv().unwrap_or(Message::Empty);
         println!("{:?}", msg);
