@@ -167,7 +167,11 @@ pub(crate) async fn server(ip: [u8; 4], port: u16, senders: Senders) {
                     )
                 },
             ))
-        .or(warp::get().map(|| fs::read("timer.txt").map_err(|_| "oof")));
+        .or(warp::get().map(|| {
+            let r = fs::read("timer.txt");
+            println!("{:?}", r);
+            r.map_err(|_| { "failed to read file" } )
+        }));
     let _ = senders.cli.send(Message::Empty);
     println!("{:?}", warp::serve(routes).run((ip, port)).await);
 }
