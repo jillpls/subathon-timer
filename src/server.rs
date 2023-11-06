@@ -21,7 +21,6 @@ unsafe impl Send for Senders {}
 #[derive(Clone, Debug)]
 pub(crate) enum Message {
     Empty,
-    String(String),
     AddDonation(f64),
     AddBits(u64),
     AddSub(u64),

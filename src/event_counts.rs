@@ -22,7 +22,13 @@ pub(crate) async fn timer(senders: Senders, receiver: Receiver<Message>) {
         println!("{:?}", msg);
         match msg {
             Message::AddBits(bits) => event_counts.bits += bits,
-            Message::AddSub(_sub) => event_counts.subs += 1,
+            Message::AddSub(sub) => {
+                event_counts.subs += match sub {
+                    2000 => 2,
+                    3000 => 5,
+                    _ => 1
+                };
+            },
             Message::AddDonation(don) => event_counts.donations += don,
             Message::AddChannelPointReward => event_counts.channel_point_rewards += 1,
             _ => {

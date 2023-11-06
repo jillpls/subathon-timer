@@ -1,6 +1,8 @@
 use std::{env, fs};
-use std::io::Read;
+use std::io::{Read, stdin};
+use std::path::Path;
 use chrono::{Duration, Local};
+use chrono::RoundingError::DurationExceedsLimit;
 use subathon_timer::{EventCounts, Settings};
 
 fn format(duration:  Duration) -> String {
@@ -60,10 +62,18 @@ async fn main() {
     let timer = tokio::spawn(async move {
         let mut max_time = chrono::Duration::hours(6);
         max_time = max_time + Duration::seconds(1);
-        let mut timestamp = chrono::Local::now();
         let mut event_counts = EventCounts::default();
         let mut bonus_time = Duration::zero();
-        let mut time_expired = Duration::zero();
+        let mut local_bonus_time = Duration::zero();
+        let mut time_expired =  if let Ok(s) = fs::read_to_string("time_expired.txt") {
+                Duration::seconds(s.parse::<i64>().unwrap_or(0))
+            } else {
+                Duration::zero()
+            };
+
+        let timestamp = chrono::Local::now() - time_expired;
+
+        let mut last_save = Local::now();
 
         loop {
             let r : Result<String, _> = rx.try_recv();
@@ -71,14 +81,20 @@ async fn main() {
                 if let Ok(v) = serde_json::de::from_str::<EventCounts>(&r) {
                     event_counts = v;
                     bonus_time = calculate_max_time_bonus(&event_counts, &Settings::default());
+                    local_bonus_time = get_local_bonus_time(&Settings::default());
                 }
             }
             time_expired = Local::now() - timestamp;
-            let fmtd = format(max_time + bonus_time - time_expired);
+            let fmtd = format(max_time + bonus_time + local_bonus_time - time_expired);
             let _ = fs::write("time_remaining.txt", fmtd);
+            if Local::now()-last_save > Duration::seconds(5) {
+                last_save = Local::now();
+                let _ = fs::write("time_expired.txt", time_expired.num_seconds().to_string());
+            }
         }
     });
 
+    let display = tokio::spawn(async move {
     let mut current = fs::read_to_string("time_remaining.txt").unwrap_or(String::new());
     loop {
         let next = fs::read_to_string("time_remaining.txt").unwrap_or(String::new());
@@ -86,8 +102,23 @@ async fn main() {
             current = next;
             print!("\r{}", fs::read_to_string("time_remaining.txt").unwrap_or(String::new()));
         }
+    }});
+
+    let mut buffer = String::new();
+    std::io::stdin().read_line(&mut buffer).unwrap();
+    match &buffer {
+        _ => println!("{}", buffer),
     }
 
     let _ = response.await;
     let _ = timer.await;
+}
+
+fn get_local_bonus_time(settings: &Settings) -> Duration {
+    if let Ok(s) = fs::read_to_string("local_events.txt") {
+        if let Ok(counts) = serde_json::from_str::<EventCounts>(&s) {
+            return calculate_max_time_bonus(&counts, settings);
+        }
+    }
+    Duration::zero()
 }
