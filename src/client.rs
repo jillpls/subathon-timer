@@ -68,11 +68,10 @@ async fn main() {
         loop {
             if let Ok(r) = reqwest::get(&url_txt).await {
                 if let Ok(r) = r.text().await {
-                    println!("{}", r);
                     let _ = tx.send(r);
                 }
             }
-            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         }
     });
 
@@ -96,7 +95,7 @@ async fn main() {
         loop {
             let r: Result<String, _> = rx.try_recv();
             if let Ok(r) = r {
-                println!("{}", r);
+                print!("\r{}", r);
                 if let Ok(v) = serde_json::de::from_str::<EventCounts>(&r) {
                     event_counts = v;
                     local_event_counts = read_local_event_counts();
@@ -104,7 +103,7 @@ async fn main() {
                     truncate_write_to_file("subs.txt", &combined.subs.to_string());
                     truncate_write_to_file(
                         "fake_subs.txt",
-                        &calculate_fake_subs(&combined, &Settings::default()).to_string(),
+                        &format!("Sub-Count: {} ({})", &calculate_fake_subs(&combined, &Settings::default()).to_string(), &combined.subs)
                     );
                     bonus_time = calculate_max_time_bonus(
                         &(event_counts + local_event_counts),
@@ -138,12 +137,12 @@ async fn main() {
 }
 
 fn calculate_fake_subs(event_counts: &EventCounts, settings: &Settings) -> u64 {
-    let mut result = event_counts.subs;
-    result += (event_counts.channel_point_rewards as f64 * settings.per_channel_point_reward / 4.)
-        .floor() as u64;
-    result += (event_counts.bits as f64 * settings.bit_per_100_value / 4.).floor() as u64;
-    result += (event_counts.donations * settings.kofi_ratio / 4.).floor() as u64;
-    result
+    let mut result = event_counts.subs as f64;
+    result += (event_counts.channel_point_rewards as f64 * settings.per_channel_point_reward / 4.);
+    result += (event_counts.bits as f64 * settings.bit_per_100_value / 4.);
+    result += (event_counts.donations * settings.kofi_ratio / 4.);
+    println!("{}", result);
+    result.round() as u64
 }
 
 fn read_local_event_counts() -> EventCounts {

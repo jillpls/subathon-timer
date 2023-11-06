@@ -69,7 +69,7 @@ async fn handle_twitch_event(
             let _ = senders.timer.send(Message::AddBits(amount.floor() as u64));
             let _ = log_event("twitch-cheer", &id, amount);
         }
-        "channel.subscribe" => {
+        "channel.subscribe" | "channel.subscription.message" => {
             let amount: f64 = event
                 .extract_object_str("tier")?
                 .parse()
@@ -169,7 +169,6 @@ pub(crate) async fn server(ip: [u8; 4], port: u16, senders: Senders) {
             ))
         .or(warp::get().map(|| {
             let r = fs::read("timer.txt");
-            println!("{:?}", r);
             r.map_err(|_| { "failed to read file" } )
         }));
     let _ = senders.cli.send(Message::Empty);
