@@ -11,7 +11,7 @@ pub(crate) async fn timer(senders: Senders, receiver: Receiver<Message>) {
         subs: 0,
         donations: 0.,
         bits: 0,
-        channel_point_rewards : 0,
+        channel_point_rewards: 0,
     };
 
     loop {
@@ -26,9 +26,9 @@ pub(crate) async fn timer(senders: Senders, receiver: Receiver<Message>) {
                 event_counts.subs += match sub {
                     2000 => 2,
                     3000 => 5,
-                    _ => 1
+                    _ => 1,
                 };
-            },
+            }
             Message::AddDonation(don) => event_counts.donations += don,
             Message::AddChannelPointReward => event_counts.channel_point_rewards += 1,
             _ => {

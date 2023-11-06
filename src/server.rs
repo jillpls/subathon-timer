@@ -1,13 +1,13 @@
 use serde::{Deserialize, Serialize};
-use std::io::{Write};
-use std::sync::mpsc::{Sender};
+use std::io::Write;
+use std::sync::mpsc::Sender;
 use std::sync::{mpsc, Arc};
 use warp::Filter;
 
 mod api_server;
 mod client;
-mod serialize;
 mod event_counts;
+mod serialize;
 
 #[derive(Clone)]
 pub(crate) struct Senders {
@@ -16,7 +16,6 @@ pub(crate) struct Senders {
 }
 
 unsafe impl Send for Senders {}
-
 
 #[derive(Clone, Debug)]
 pub(crate) enum Message {

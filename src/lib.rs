@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::ops::Add;
 use warp::http::{HeaderValue, StatusCode};
 use warp::reply::Response;
 use warp::{http, Reply};
@@ -11,6 +12,19 @@ pub struct EventCounts {
     pub channel_point_rewards: u64,
 }
 
+impl Add<EventCounts> for EventCounts {
+    type Output = EventCounts;
+
+    fn add(self, rhs: EventCounts) -> Self::Output {
+        EventCounts {
+            subs: self.subs + rhs.subs,
+            donations: self.donations + rhs.donations,
+            bits: self.bits + rhs.bits,
+            channel_point_rewards: self.channel_point_rewards + rhs.channel_point_rewards,
+        }
+    }
+}
+
 #[derive(Copy, Clone)]
 pub struct Settings {
     pub kofi_ratio: f64,
@@ -21,12 +35,12 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-       Self {
-           kofi_ratio : 1.0,
-           subscription_value : 4.0,
-           bit_per_100_value : 1.0,
-           per_channel_point_reward : 1.0
-       }
+        Self {
+            kofi_ratio: 1.0,
+            subscription_value: 4.0,
+            bit_per_100_value: 1.0,
+            per_channel_point_reward: 1.0,
+        }
     }
 }
 

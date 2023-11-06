@@ -29,14 +29,14 @@ fn log_event(name: &str, id: &str, value: f64) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-async fn check_transaction_id(saved_ids : Arc<Mutex<HashSet<String>>>, id : &str) -> bool {
-        let mut si = saved_ids.lock().await;
-        if si.contains(id) {
-            true
-        } else {
-            si.insert(id.to_string());
-            false
-        }
+async fn check_transaction_id(saved_ids: Arc<Mutex<HashSet<String>>>, id: &str) -> bool {
+    let mut si = saved_ids.lock().await;
+    if si.contains(id) {
+        true
+    } else {
+        si.insert(id.to_string());
+        false
+    }
 }
 
 fn with_senders(sender: Senders) -> impl Filter<Extract = (Senders,), Error = Infallible> + Clone {
@@ -141,44 +141,33 @@ pub(crate) async fn server(ip: [u8; 4], port: u16, senders: Senders) {
     let saved_ids: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
     let saved_ids2 = saved_ids.clone();
 
-    let routes =
-        warp::path("channel")
-            .map(|| "uwuwu")
-            .or(warp::post()
-                .and(warp::header::headers_cloned())
-                .and(warp::body::json())
-                .and(with_senders(senders.clone()))
-                .and(warp::any().map(move || saved_ids.clone()))
-                .and_then(
-                    move |headers,
-                          body,
-                          senders,
-                          saved_ids: Arc<Mutex<HashSet<String>>>,| async move {
-                        Ok::<_, Infallible>(
-                            handle_json(headers, body, senders, saved_ids.clone()).await,
-                        )
-                    },
-                ))
-            .or(warp::post()
-                .and(warp::header::headers_cloned())
-                .and(warp::body::form())
-                .and(with_senders(senders.clone()))
-                .and(warp::any().map(move || saved_ids2.clone()))
-                .and_then(
-                    move |headers,
-                          body,
-                          senders,
-                          saved_ids: Arc<Mutex<HashSet<String>>>,
-                          | async move {
-                        Ok::<_, Infallible>(
-                            handle_url_encoded(headers, body, senders, saved_ids.clone())
-                                .await,
-                        )
-                    },
-                ))
-            .or(warp::get().map(|| {
-                fs::read("timer.txt").map_err(|_| "oof")
-            }));
+    let routes = warp::path("channel")
+        .map(|| "uwuwu")
+        .or(warp::post()
+            .and(warp::header::headers_cloned())
+            .and(warp::body::json())
+            .and(with_senders(senders.clone()))
+            .and(warp::any().map(move || saved_ids.clone()))
+            .and_then(
+                move |headers, body, senders, saved_ids: Arc<Mutex<HashSet<String>>>| async move {
+                    Ok::<_, Infallible>(
+                        handle_json(headers, body, senders, saved_ids.clone()).await,
+                    )
+                },
+            ))
+        .or(warp::post()
+            .and(warp::header::headers_cloned())
+            .and(warp::body::form())
+            .and(with_senders(senders.clone()))
+            .and(warp::any().map(move || saved_ids2.clone()))
+            .and_then(
+                move |headers, body, senders, saved_ids: Arc<Mutex<HashSet<String>>>| async move {
+                    Ok::<_, Infallible>(
+                        handle_url_encoded(headers, body, senders, saved_ids.clone()).await,
+                    )
+                },
+            ))
+        .or(warp::get().map(|| fs::read("timer.txt").map_err(|_| "oof")));
     let _ = senders.cli.send(Message::Empty);
     println!("{:?}", warp::serve(routes).run((ip, port)).await);
 }
